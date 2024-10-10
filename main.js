@@ -15,71 +15,105 @@ let mouseY = window.innerHeight / 2;
 //3d object
 let object;
 let controls;
-let objToRender ='lily';
-
+let objToRender ;
 //.gltf -> file format 3D files retaining a consistent PBR workflow
 const loader = new GLTFLoader();
 
+// Variable to store the currently active object
+let activeObject = null;
 
-loader.load(
-    `models/${objToRender}/scene.gltf`,
-    function(gltf){
-        object = gltf.scene; 
-        scene.add(object);
+// Function to load a GLTF model and replace the currently active object
+function loadModel(modelPath) {
+  if (activeObject) {
+    scene.remove(activeObject); // Remove the previous object from the scene
+    activeObject = null;   
+  }
+
+  loader.load(
+    modelPath,
+    function(gltf) {
+      activeObject = gltf.scene;   // Store the loaded object
+      scene.add(activeObject);     // Add the new object to the scene
+
+      let targetPosition = activeObject.position.clone();
+      camera.lookAt(targetPosition);
+      camera.position.z = 5;
+
+      renderer.render(scene, camera);
     },
-    function(xhr){
-        console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+    function(xhr) {
+      console.log((xhr.loaded / xhr.total * 100) + '% loaded');
     },
-    function (error){
-        console.error(error);
+    function(error) {
+      console.error(error);
     }
-);
+  );
+}
+
+// Event listeners for buttons to load different models
+const models = ['lily', 'pink', 'blue'];  
+
+models.forEach((model, index) => {
+  const buttonId = `button${index + 1}`; 
+  
+  document.getElementById(buttonId).addEventListener("click", function() {
+    objToRender = model;  // Set the current model
+    loadModel(`models/${objToRender}/scene.gltf`);  // Load corresponding model
+  });
+});
+
+
+// Camera and scroll-related variables
+let maxRotationAngle = 2 * Math.PI;  // Full 360 degrees in radians (complete rotation)
+let maxYShift = 4;                // Maximum downward movement (negative y direction)
+let cameraDistance = 5;             // Distance from the object (radius of circular path)
+let scrollFactor = 0.5;              // Sensitivity of scroll movement
+let totalScroll = 0;                 // Tracks total scroll movement
+let maxScroll = 1000;                // Max scroll distance for full model view
+
 
 const renderer = new THREE.WebGLRenderer({alpha: true});
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.getElementById("container3D").appendChild(renderer.domElement);
 
-let cameraStartZ = 500;      // Initial camera z position (farther from object)
-let cameraEndZ = 4;          // Final camera z position (closer to object)
-let cameraStartX = 0;        // Initial x position
-let maxXShift = 50;          // Max shift in x axis during scroll
-let maxRotationY = Math.PI;  // 180 degrees in radians for full rotation
-let scrollFactor = 0.5;      // Sensitivity of scroll movement
-let totalScroll = 0;         // Tracks total scroll movement
-let maxScroll = 1000;        // Max scroll distance for full model view
 
-// Listen for scroll (wheel) event
 document.getElementById("wheel").addEventListener("wheel", function(event) {
-    // Determine scroll direction (+/-) and update total scroll
-    totalScroll += event.deltaY * scrollFactor;
+    if (activeObject) { 
+        // Update total scroll amount based on scroll direction
+        totalScroll += event.deltaY * scrollFactor;
 
-    // Normalize scroll: clamp totalScroll between 0 and maxScroll, then map to a 0-1 range
-    let scrollProgress = Math.max(0, Math.min(totalScroll, maxScroll)) / maxScroll;
+        // Normalize scroll progress between 0 and 1
+        let scrollProgress = Math.max(0, Math.min(totalScroll, maxScroll)) / maxScroll;
 
-    // Calculate camera position and rotation based on scroll progress
-    camera.position.z = cameraStartZ - scrollProgress * (cameraStartZ - cameraEndZ);
-    camera.position.x = cameraStartX + scrollProgress * maxXShift;
-    camera.rotation.y = scrollProgress * maxRotationY;
+        // Calculate camera's circular path using sin and cos
+        let angle = scrollProgress * maxRotationAngle;  // Full rotation based on scroll
+        
+        let cameraX = cameraDistance * Math.sin(angle);  // Circular path on x-axis
+        let cameraZ = cameraDistance * Math.cos(angle);  // Circular path on z-axis
+        let cameraY = scrollProgress * maxYShift; // Calculate downward movement of the camera on the y-axis
 
-    console.log("cameraZ" + camera.position.z);
-    console.log("cameraX" + camera.position.x);
-    console.log("cameraY" + camera.rotation.y);
+        // Update camera position
+        camera.position.set(cameraX, -cameraY, cameraZ);  // Move camera along the circular path and downward
 
-    // Optional: Render the scene after updating the camera and object
-    renderer.render(scene, camera);
+        // Make the camera look at the object's position
+        let targetPosition = activeObject.position.clone();
+        camera.lookAt(targetPosition);
+
+        console.log("Camera position - X:", camera.position.x, "Y:", camera.position.y, "Z:", camera.position.z);
+        renderer.render(scene, camera);
+    }
 });
-
 
 //Add light to the scene
 const topLight = new THREE.DirectionalLight(0xffffff, 1); 
-topLight.position.set(500, 500, 500);
-topLight.castShadow = true;
+topLight.position.set(-100, -100, -100);
+topLight.castShadow = false;
 scene.add(topLight);
 
-const ambientLight = new THREE.AmbientLight(0x333333, objToRender === "lily" ? 5 : 1);
+const ambientLight = new THREE.AmbientLight(0x333333, objToRender === "lily" ? 25 : 1);
 scene.add(ambientLight);
 
-if (objToRender === "lily") {
+if (objToRender) {
     controls = new OrbitControls(camera, renderer.domElement);
 }
 
